@@ -110,7 +110,7 @@ following three arguments:
     2. the polynomial degree for the local spaces
     3. a function handle for the right hand side of the PDE
 
-See runme.m for different examples.
+See demo.m for different examples.
 
 =============================================================================
 BUG FIXES / UPDATES

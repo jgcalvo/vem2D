@@ -7,16 +7,20 @@ function demo(varargin)
 % INPUT:  opt:	    scalar with two options:
 %                   1: convergence example as a function of h and k for a
 %                   small set of values of h and k (due to running times)
+%                   for Poisson's equation
 %                   2: plot solution for a particular value of h and k
 %                   3: approximate harmonic functions without VEM for the
 %                   unit square (meshType is not required)
 %                   4: approximate harmonic functions without VEM for a
 %                   L-shaped domain (meshType is not required)
+%                   5: convergence example as a function of h and k for a
+%                   small set of values of h and k (due to running times)
+%                   for Helmholtz equation
 %         meshType: type of mesh; use 'tri','hex' or 'vor' to use
-%                   provided meshes for options 1 and 2
+%                   provided meshes for options 1, 2 and 5
 %
 % EXAMPLE:
-%         demo(1,'tri'),
+%         demo(1,'tri'), demo(5,'hex'),
 
 % AUTHOR: Juan G. Calvo and collaborators, 2021
 
@@ -28,7 +32,8 @@ else
 end
 
 switch opt
-    case 1 % convergence as a function of h and k
+    case {1,5} 
+        % convergence as a function of h and k for Poisson and Helmholtz
         % load mesh files for triangles; can also use voronoi or hexagons
         files = dir(['./meshes/' meshType '*']);
         % polynomial degree
@@ -36,15 +41,30 @@ switch opt
         % matrices to store data
         errL2  = nan(3,numel(k));
         diam   = nan(3,numel(k));
-        % rhs and exact solution
-        f   = @(x,y) 2*pi*pi*sin(pi*x).*sin(pi*y);
+        % exact solution and rhs
         sol = @(x,y) sin(pi*x).*sin(pi*y);
-        
+        if(opt == 1) % Poisson
+            f  = @(x,y) 2*pi*pi*sin(pi*x).*sin(pi*y);
+        else         % Helmholtz
+            f  = @(x,y) 2*pi*pi*sin(pi*x).*sin(pi*y) + sol(x,y); 
+        end
         for indFile = 1:3 % mesh loop
             mesh = load(['./meshes/' files(indFile).name]);
             mesh = mesh.mesh;
             for indK = 1:numel(k)    % degree loop
-                out = vem2d(mesh,k(indK),f); % VEM main function
+                [out,mesh] = vem2d(mesh,k(indK),f); % VEM main function
+                Abc = out.A;
+                b   = out.b;
+                if(opt == 5) % Helmholtz
+                    Abc = Abc + out.M;
+                end
+                % impose homogeneous boundary conditions
+                Abc(mesh.bdDOF,:) = 0;
+                Abc(:,mesh.bdDOF) = 0;
+                Abc(mesh.bdDOF,mesh.bdDOF) = speye(size(mesh.bdDOF,1),size(mesh.bdDOF,1));
+                b(mesh.bdDOF)=0;
+                % direct solver
+                out.u = Abc\b;
                 % compute L2 error
                 errL2(indFile,indK)  = getL2Error(out,sol);
                 % store diameter
@@ -52,7 +72,7 @@ switch opt
             end
         end
         
-        % plot L2 error as fn of
+        % plot L2 error as fn of k
         figure(1)
         indMesh = 2;
         loglog(k,errL2(indMesh,:))
@@ -76,7 +96,16 @@ switch opt
         % rhs and exact solution
         f   = @(x,y) 2*pi*pi*sin(pi*x).*sin(pi*y);
         sol = @(x,y) sin(pi*x).*sin(pi*y);
-        out = vem2d(mesh,k,f); % VEM main function
+        [out, mesh] = vem2d(mesh,k,f); % VEM main function
+        Abc = out.A;
+        b   = out.b;
+        % impose homogeneous boundary conditions
+        Abc(mesh.bdDOF,:) = 0;
+        Abc(:,mesh.bdDOF) = 0;
+        Abc(mesh.bdDOF,mesh.bdDOF) = speye(size(mesh.bdDOF,1),size(mesh.bdDOF,1));
+        b(mesh.bdDOF)=0;
+        % direct solver
+        out.u = Abc\b;
         % plot numerical solution
         % we only consider values on vertices for simplicity
         valVertex = out.u(1:size(mesh.verts,1));
@@ -84,16 +113,13 @@ switch opt
         figure(1)
         patch('Faces', elems, 'Vertices', mesh.verts,'CData', valVertex,'FaceColor','interp');
         colorbar
-        axis equal
-        axis off
+        xlabel('x'), ylabel('y'), title('Numerical solution for Poisson equation, $k=4$','Interpreter','Latex')
         % plot numerical error
         figure(2)
         error = abs(valVertex-sol(mesh.verts(:,1),mesh.verts(:,2)));
-        %cData = cData/norm(cData,inf);
         patch('Faces', elems, 'Vertices', mesh.verts,'CData', error,'FaceColor','interp');
         colorbar
-        axis equal
-        axis off
+        xlabel('x'), ylabel('y'), title('Numerical error for Poisson equation, $k=4$','Interpreter','Latex')
     case {3, 4} % mesh free solver for approximating harmonic functions
         % store error
         error = zeros();  pt = 1;
@@ -141,9 +167,9 @@ switch opt
             D2 = -M22\M21*D1;   % interior dof
             dof = [D1; D2];
             coef = proj*dof;    % coef of solution (in monomial basis)
-            % evaluate at point [.5 .5]
-            x = [.5 .5]; 
-            M = ((x(1)-centroid(1))/diam).^polys(:,1).*((x(1)-centroid(2))/diam).^polys(:,2);
+            % evaluate at point [1/5 2/5]
+            x = [1/5 2/5];
+            M = ((x(1)-centroid(1))/diam).^polys(:,1).*((x(2)-centroid(2))/diam).^polys(:,2);
             error(pt) = abs(M'*coef-uex(x));
             pt = pt + 1;
         end

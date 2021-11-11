@@ -1,4 +1,4 @@
-function out = vem2d(mesh,k,f)
+function [out,mesh] = vem2d(mesh,k,f)
 % VEM2D computes the virtual element solution of a Poisson problem on a
 %	 polygonal mesh with degree k and right hand side f
 %
@@ -85,7 +85,7 @@ for E = 1:size(mesh.elems,1)
     
     % local stiffness matrix
     G = B*D;
-    PiStar = G\B;
+    PiStar = mypinv(G,B); %G\B;
     G(1, :) = 0;
     I = eye(n_dof);
     A = PiStar'*G*PiStar + (I-D*PiStar)'*(I-D*PiStar);
@@ -101,9 +101,9 @@ for E = 1:size(mesh.elems,1)
     C(1:nk2,k*nVerts+(1:nk2)) = area*eye(nk2);
     Ctem = H*PiStar;
     C(nk2+1:nPolys,:) = Ctem(nk2+1:nPolys,:);
-    PiStar0 = H\C;                       % L2 projections
-    Pi0 = D*PiStar0;
-    M = C'*(H\C)+area*(I-Pi0)'*(I-Pi0);  % mass matrix
+    PiStar0 = mypinv(H,C);               % L2 projections Pi = H\C
+    Pi0 = D*PiStar0;                     % H is ill-conditioned 
+    M = C'*(PiStar0)+area*(I-Pi0)'*(I-Pi0);  % mass matrix
     
     % rhs
     int_fm = zeros(nPolys,1);            % compute (f,Pi*m_alpha)
@@ -131,17 +131,14 @@ A = sparse(jj,ii,aa);
 M = sparse(jj,ii,mm);
 b = accumarray(irhs,rhs(:),[size(A,1) 1]);
 
-% impose boundary conditions
-Abc = A;
-Abc(mesh.bdDOF,:) = 0;
-Abc(:,mesh.bdDOF) = 0;
-Abc(mesh.bdDOF,mesh.bdDOF) = speye(size(mesh.bdDOF,1),size(mesh.bdDOF,1));
-b(mesh.bdDOF)=0;
-
-% direct solver
-u = Abc\b;
-
 % save struct with info
-out = struct('u',u,'h',hmax,'mesh',mesh,'proj',{projector},...
-    'polys',polys,'M',M,'A',A);
+out = struct('h',hmax,'mesh',mesh,'proj',{projector},...
+    'polys',polys,'M',M,'A',A,'b',b);
+end
+
+function PiStar0 = mypinv(H,C)
+    [U,S,V] = svd(H);
+    ind = (diag(S)<1e-12*S(1,1));       % remove singular values close to 0
+    Stem = diag(S); Stem(ind) = inf;
+    PiStar0 = V*(diag(1./Stem)*(U'*C));
 end
