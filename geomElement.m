@@ -13,7 +13,7 @@ function [diameter,area,centroid] = geomElement(verts)
 % AUTHOR: Juan G. Calvo and collaborators, 2021
 
 % compute diameter (maximum distance between two vertices)
-allPairs  = combnk(1:size(verts,1),2);
+allPairs  = nchoosek(1:size(verts,1),2);
 diffVerts = verts(allPairs(:,1),:)-verts(allPairs(:,2),:);
 diameter  = sqrt(max(sum(diffVerts.*diffVerts,2)));
 % formulas for area and centroid
